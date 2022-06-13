@@ -77,7 +77,7 @@ router.get('/courses/:id', asyncHandler(async (req, res) => {
 // POST COURSES 201 create a new course
 router.post('/courses', authenticateUsers, asyncHandler(async (req, res) => {
     const course = await Course.create(req.body);
-    res.status(201).location(`/courses/${course.id}`).end();
+    res.status(201).end();
 }))
 
 // PUT COURSES ID 204 update specific course
