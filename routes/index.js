@@ -1,25 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
 const User = require('../models').User;
 const Course = require('../models').Course;
 const { authenticateUsers } = require('../middleware/auth-user');
+const { asyncHandler } = require('../middleware/async-handler');
 
-// HELPER FUNCTION
-function asyncHandler(cb){
-    return async (req, res, next)=>{
-      try {
-        await cb(req,res, next);
-      } catch(err){
-        if (err.name === 'SequelizeValidationError'|| err.name === "SequelizeUniqueConstraintError") {
-          const validationErrors = err.errors.map(err => err.message)
-          res.status(400).json({validationErrors});
-        } else {
-          next(err);
-        }
-      }
-    };
-}
+
 
 // GET USERS 200 return all data for current user
 router.get('/users', authenticateUsers, asyncHandler(async (req, res) => {
@@ -34,19 +20,30 @@ router.get('/users', authenticateUsers, asyncHandler(async (req, res) => {
 
 // POST USERS 201 create a new user
 router.post('/users', asyncHandler(async (req, res) => {
-    const user = req.body;
-    user.password = bcrypt.hashSync(user.password, 10);
-    await User.create(user);
-    res.sendStatus(201);
+    await User.create(req.body);
+    res.status(201).location('/').end();
 }))
 
 // GET COURSES 200 return all courses including associated users
 router.get('/courses', asyncHandler(async (req, res) => {
     const courses = await Course.findAll({
+      attributes: {
+        exclude: [
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       include: [
         {
           model: User,
-          as: "Users"
+          as: "Users",
+          attributes: {
+            exclude: [
+              "createdAt",
+              "updatedAt",
+              "password"
+            ]
+          },
         }
       ]
     });
@@ -60,46 +57,76 @@ router.get('/courses/:id', asyncHandler(async (req, res) => {
       where: {
         id: req.params.id
       },
+      attributes: {
+        exclude: [
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       include: [
         {
           model: User,
-          as: "Users"
+          as: "Users",
+          attributes: {
+            exclude: [
+              "createdAt",
+              "updatedAt",
+              "password"
+            ]
+          },
         }
       ]
     });
     if (course) {
       res.status(200).json(course);
     } else {
-      res.sendStatus(404);
+      res.status(404).end();
     }
 }))
 
 // POST COURSES 201 create a new course
 router.post('/courses', authenticateUsers, asyncHandler(async (req, res) => {
     const course = await Course.create(req.body);
-    res.status(201).end();
+    res.status(201).location(`/courses/${course.id}`).end();
 }))
 
 // PUT COURSES ID 204 update specific course
-router.put('/courses/:id', asyncHandler(async (req, res) => {
+router.put('/courses/:id', authenticateUsers, asyncHandler(async (req, res) => {
+    const user = req.currentUser;
     const course = await Course.findByPk(req.params.id);
     if (course) {
-      await course.update(req.body);
-      res.sendStatus(204);
+      if (user.id == course.userId) {
+        const newCourse = req.body;
+        if (newCourse) {
+          await course.update(req.body);
+          res.status(204).end();
+        } else {
+          res.status(400).end();
+        }
+        
+      } else {
+        res.status(403).end();
+      }
     } else {
-      res.sendStatus(404);
+      res.status(404).end();
     }
 }))
 
 // DELETE COURSES ID 204 delete specific course
-router.delete('/courses/:id', asyncHandler(async (req, res) => {
+router.delete('/courses/:id', authenticateUsers, asyncHandler(async (req, res) => {
+  const user = req.currentUser;
   const course = await Course.findByPk(req.params.id);
   if (course) {
-    await course.destroy();
-    res.sendStatus(204);
+    if (user.id == course.userId) {
+      await course.destroy();
+      res.status(204).end();
+    } else {
+      res.status(403).end();
+    }
   } else {
-    res.sendStatus(404);
+    res.status(404).end();
   }
 }))
+
 
 module.exports = router;

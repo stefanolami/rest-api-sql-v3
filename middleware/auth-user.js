@@ -33,6 +33,4 @@ exports.authenticateUsers = async (req, res, next) => {
     } else {
         next(); 
     }
-
-    next();
 }
